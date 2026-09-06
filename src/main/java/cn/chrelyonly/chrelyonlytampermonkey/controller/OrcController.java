@@ -2,6 +2,7 @@ package cn.chrelyonly.chrelyonlytampermonkey.controller;
 
 
 import cn.chrelyonly.chrelyonlytampermonkey.component.R;
+import cn.chrelyonly.chrelyonlytampermonkey.config.MyServerConfig;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.http.HttpRequest;
 import cn.hutool.http.HttpResponse;
@@ -23,7 +24,7 @@ public class OrcController {
     @PostMapping("/getCode")
     public R getCode(@RequestBody JSONObject jsonObject){
         try (HttpResponse httpResponse = HttpRequest
-                .post("https://api.chrelyonly.cn/api/orc-api/orcBase64")
+                .post(MyServerConfig.SERVICE_ORC_API_URL + "/ocr/base64")
                 .body(jsonObject.toJSONString())
                 .execute()) {
             return R.data(JSONObject.parseObject(httpResponse.body()));
