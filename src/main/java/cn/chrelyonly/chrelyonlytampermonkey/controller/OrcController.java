@@ -11,7 +11,6 @@ import com.alibaba.fastjson2.JSONObject;
 import io.micrometer.common.util.StringUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
@@ -99,5 +98,79 @@ public class OrcController {
 
         return R.success("规则保存成功");
     }
+    /**
+     * 删除指定验证码规则
+     * POST /orc-api/deleteRule
+     *
+     * 请求参数：
+     * {
+     *     "host": "example.com",
+     *     "img": "#captcha",
+     *     "input": "#captchaCode"
+     * }
+     */
+    @PostMapping("/deleteRule")
+    public R deleteRule(@RequestBody JSONObject jsonObject) {
+        String host = jsonObject.getString("host");
+        String img = jsonObject.getString("img");
+        String input = jsonObject.getString("input");
 
+        // 1. 参数校验
+        if (!StrUtil.isAllNotBlank(host, img, input)) {
+            return R.fail("缺少必要参数：host, img, input");
+        }
+
+        // 2. 获取当前域名的规则
+        Object existingRuleStr = redisTemplate.opsForHash()
+                .get(CAPTCHA_RULE_KEY, host);
+
+        if (existingRuleStr == null) {
+            return R.fail("当前域名不存在验证码规则");
+        }
+
+        // 3. 解析规则列表
+        JSONArray ruleArray;
+        try {
+            ruleArray = JSONArray.parseArray(existingRuleStr.toString());
+        } catch (Exception e) {
+            log.error("验证码规则解析失败，host={}", host, e);
+            return R.fail("规则数据解析失败");
+        }
+
+        // 4. 删除匹配的规则
+        boolean removed = false;
+
+        for (int i = ruleArray.size() - 1; i >= 0; i--) {
+            JSONObject rule = ruleArray.getJSONObject(i);
+
+            if (rule != null
+                    && StrUtil.equals(img, rule.getString("img"))
+                    && StrUtil.equals(input, rule.getString("input"))) {
+
+                ruleArray.remove(i);
+                removed = true;
+            }
+        }
+
+        if (!removed) {
+            return R.fail("未找到匹配的验证码规则");
+        }
+
+        // 5. 更新 Redis
+        if (ruleArray.isEmpty()) {
+            // 没有剩余规则，直接删除整个 host
+            redisTemplate.opsForHash().delete(CAPTCHA_RULE_KEY, host);
+        } else {
+            // 还有剩余规则，更新规则列表
+            redisTemplate.opsForHash().put(
+                    CAPTCHA_RULE_KEY,
+                    host,
+                    ruleArray.toJSONString()
+            );
+        }
+
+        log.info("验证码规则删除成功：host={}, img={}, input={}", host, img, input);
+
+        return R.success("规则删除成功");
+    }
 }
